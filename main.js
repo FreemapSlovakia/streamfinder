@@ -9,14 +9,19 @@ let p;
 
 let busy = false;
 
-const server = http.createServer(async (req, res) => {
-  if (req.method !== "POST") {
-    res.writeHead(405, { "Content-Type": "text/plain" });
-    res.end("Only POST method is allowed.");
-    return;
-  }
+const server = http.createServer(handleRequest);
 
-  if (req.headers["content-type"] !== "application/json") {
+/**
+ *
+ * @param {http.IncomingMessage} req
+ * @param {http.ServerResponse} res
+ * @returns
+ */
+async function handleRequest(req, res) {
+  if (
+    req.method === "POST" &&
+    req.headers["content-type"] !== "application/json"
+  ) {
     res.writeHead(406, { "Content-Type": "text/plain" });
     res.end("Body is not application/json.");
     return;
@@ -50,23 +55,54 @@ const server = http.createServer(async (req, res) => {
   try {
     const ws = fs.createWriteStream("mask.geojson");
 
-    await new Promise((resolve, reject) => {
-      ws.on("open", () => {
-        req.pipe(ws);
-      });
+    if (req.method === "POST") {
+      await new Promise((resolve, reject) => {
+        ws.on("open", () => {
+          req.pipe(ws);
+        });
 
-      ws.on("error", (err) => {
-        reject(err);
-      });
+        ws.on("error", (err) => {
+          reject(err);
+        });
 
-      req.on("error", (err) => {
-        reject(err);
-      });
+        req.on("error", (err) => {
+          reject(err);
+        });
 
-      req.on("end", () => {
-        resolve();
+        req.on("end", () => {
+          resolve();
+        });
       });
-    });
+    } else {
+      const mask = new URL(
+        req.url,
+        `http://${req.headers.host}`
+      ).searchParams.get("mask");
+
+      if (!mask) {
+        console.log("[Busy]");
+        res.writeHead(400, { "Content-Type": "text/plain" });
+        res.end("Missing mask parameter.");
+
+        return;
+      }
+
+      await new Promise((resolve, reject) => {
+        ws.write(mask, (err) => {
+          if (err) {
+            reject(err);
+          } else {
+            ws.close((err) => {
+              if (err) {
+                reject(err);
+              } else {
+                resolve();
+              }
+            });
+          }
+        });
+      });
+    }
 
     console.log("[Responding]");
 
@@ -112,22 +148,23 @@ const server = http.createServer(async (req, res) => {
         resolve();
       });
     });
-  } catch (e) {
+  } catch (err) {
     if (closed) {
       console.log("Connection closed prematurely");
-    } else if (e.message === "area too big") {
+    } else if (err.message === "area too big") {
       res.writeHead(400, { "Content-Type": "text/plain" });
       res.end("Area is too big.");
     } else {
+      console.error(err);
       res.writeHead(500);
-      res.end(e.message);
+      res.end(err.message);
     }
   } finally {
     busy = false;
 
     console.log("[Done]");
   }
-});
+}
 
 server.listen(8080);
 
@@ -156,7 +193,10 @@ async function workHard() {
   }
 
   await run(
-    $`gdalwarp -overwrite -of GTiff -cutline mask.geojson -crop_to_cutline ${process.env.DEM_PATH ?? '/media/martin/OSM/___LIDAR_UGKK_DEM5_0_JTSK03_1cm.tif'} cropped.tif`
+    $`gdalwarp -overwrite -of GTiff -cutline mask.geojson -crop_to_cutline ${
+      process.env.DEM_PATH ??
+      "/media/martin/OSM/___LIDAR_UGKK_DEM5_0_JTSK03_1cm.tif"
+    } cropped.tif`
   );
 
   await run(
