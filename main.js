@@ -155,7 +155,7 @@ async function process() {
   }
 
   await run(
-    $`gdalwarp -overwrite -of GTiff -cutline mask.geojson -crop_to_cutline /media/martin/OSM/___LIDAR_UGKK_DEM5_0_JTSK03_1cm.tif cropped.tif`
+    $`gdalwarp -overwrite -of GTiff -cutline mask.geojson -crop_to_cutline ${process.env.DEM_PATH ?? '/media/martin/OSM/___LIDAR_UGKK_DEM5_0_JTSK03_1cm.tif'} cropped.tif`
   );
 
   await run(
