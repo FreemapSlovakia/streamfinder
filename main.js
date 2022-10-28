@@ -1,6 +1,7 @@
 import http from "node:http";
 import fs from "node:fs";
 import { $, ProcessPromise } from "zx";
+import area from "@turf/area";
 
 /** @type {ProcessPromise} */
 let p;
@@ -113,6 +114,9 @@ const server = http.createServer(async (req, res) => {
   } catch (e) {
     if (closed) {
       console.log("Connection closed prematurely");
+    } else if (e.message === "area too big") {
+      res.writeHead(400, { "Content-Type": "text/plain" });
+      res.end("Area is too big.");
     } else {
       res.writeHead(500);
       res.end(e.message);
@@ -132,12 +136,24 @@ server.listen(8080);
 async function run(pp) {
   p = pp;
 
-  await pp;
+  const res = await pp;
 
   p = undefined;
+
+  return res;
 }
 
 async function process() {
+  const a = await run(
+    $`ogrinfo -q -dialect SQLite -sql "SELECT SUM(ST_Area(st_transform(geometry, 8353))) AS area FROM mask" mask.geojson`
+  );
+
+  const area = Number(/area \(Real\) = ([\d\.]*)/.exec(a.stdout)?.[1]);
+
+  if (!area || area > 200_000_000) {
+    throw new Error("area too big");
+  }
+
   await run(
     $`gdalwarp -overwrite -of GTiff -cutline mask.geojson -crop_to_cutline /media/martin/OSM/___LIDAR_UGKK_DEM5_0_JTSK03_1cm.tif cropped.tif`
   );

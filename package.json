@@ -14,6 +14,7 @@
     "@types/node": "^18.11.7"
   },
   "dependencies": {
+    "@turf/area": "^6.5.0",
     "p-queue": "^7.3.0",
     "zx": "^7.1.1"
   }
