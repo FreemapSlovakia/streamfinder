@@ -1,0 +1,10 @@
+node_modules
+*.shp
+*.shx
+*.dbf
+*.prj
+*.geojson
+*.qmd
+*.tif
+*.gpkg
+
