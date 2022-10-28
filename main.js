@@ -1,5 +1,6 @@
 import http from "node:http";
 import fs from "node:fs";
+import process from "node:process";
 import { $, ProcessPromise } from "zx";
 import area from "@turf/area";
 
@@ -89,7 +90,7 @@ const server = http.createServer(async (req, res) => {
     }, 10000);
 
     try {
-      await process();
+      await workHard();
     } finally {
       clearInterval(tid);
     }
@@ -143,7 +144,7 @@ async function run(pp) {
   return res;
 }
 
-async function process() {
+async function workHard() {
   const a = await run(
     $`ogrinfo -q -dialect SQLite -sql "SELECT SUM(ST_Area(st_transform(geometry, 8353))) AS area FROM mask" mask.geojson`
   );
