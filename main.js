@@ -52,6 +52,13 @@ async function handleRequest(req, res) {
 
   busy = true;
 
+
+  const params = new URL(req.url, `http://${req.headers.host}`).searchParams;
+
+  const threshold = params.get('threshold') || 20000;
+
+  const minLen = params.get('min-len') || 50;
+
   try {
     const ws = fs.createWriteStream("mask.geojson");
 
@@ -74,10 +81,7 @@ async function handleRequest(req, res) {
         });
       });
     } else {
-      const mask = new URL(
-        req.url,
-        `http://${req.headers.host}`
-      ).searchParams.get("mask");
+      const mask = params.get("mask");
 
       if (!mask) {
         res.writeHead(400, { "Content-Type": "text/plain" });
@@ -123,7 +127,7 @@ async function handleRequest(req, res) {
     }, 10000);
 
     try {
-      await workHard();
+      await workHard(threshold, minLen);
     } finally {
       clearInterval(tid);
     }
@@ -183,7 +187,7 @@ async function run(pp) {
   return res;
 }
 
-async function workHard() {
+async function workHard(threshold, minLen) {
   const a = await run(
     $`ogrinfo -q -dialect SQLite -sql "SELECT SUM(ST_Area(st_transform(geometry, 8353))) AS area FROM mask" mask.geojson`
   );
@@ -206,11 +210,11 @@ async function workHard() {
   );
 
   await run(
-    $`whitebox_tools --run=ExtractStreams --flow_accum=accum.tif --threshold=20000 --output=streams.tif`
+    $`whitebox_tools --run=ExtractStreams --flow_accum=accum.tif --threshold=${threshold} --output=streams.tif`
   );
 
   await run(
-    $`whitebox_tools --run=RemoveShortStreams --d8_pntr=pointer.tif --streams=streams.tif --output=long_streams.tif --min_length=50`
+    $`whitebox_tools --run=RemoveShortStreams --d8_pntr=pointer.tif --streams=streams.tif --output=long_streams.tif --min_length=${minLen}`
   );
 
   await run(
