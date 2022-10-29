@@ -214,18 +214,18 @@ async function workHard() {
   );
 
   await run(
-    $`gdal_calc.py --calc '(A==1)*1' -A long_streams.tif --outfile long_streams_clean.tif`
+    $`gdal_calc.py --overwrite --calc '(A==1)*1' -A long_streams.tif --outfile long_streams_clean.tif`
   );
 
   await run(
     $`whitebox_tools --run=RasterStreamsToVector --streams=long_streams_clean.tif --d8_pntr=pointer.tif --output=streams`
   );
 
-  await run($`ogr2ogr --overwrite -a_srs epsg:8353 streams8.shp streams.shp`);
+  await run($`ogr2ogr -a_srs epsg:8353 streams8.shp streams.shp`);
 
   await run($`grass --tmp-location EPSG:8353 --exec sh grass_batch_job.sh`);
 
   await run(
-    $`ogr2ogr --overwrite -simplify 1.5 -t_srs EPSG:4326 simplified.geojson smooth.gpkg`
+    $`ogr2ogr -simplify 1.5 -t_srs EPSG:4326 simplified.geojson smooth.gpkg`
   );
 }
