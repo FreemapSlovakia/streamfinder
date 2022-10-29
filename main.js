@@ -80,7 +80,6 @@ async function handleRequest(req, res) {
       ).searchParams.get("mask");
 
       if (!mask) {
-        console.log("[Busy]");
         res.writeHead(400, { "Content-Type": "text/plain" });
         res.end("Missing mask parameter.");
 
@@ -106,10 +105,8 @@ async function handleRequest(req, res) {
 
     console.log("[Responding]");
 
-    let headerWritten = false;
-
     function writeHeader() {
-      if (headerWritten) {
+      if (res.headersSent) {
         return;
       }
 
@@ -117,11 +114,11 @@ async function handleRequest(req, res) {
         "Content-Type": "application/json",
         "Content-Disposition": 'attachment; filename="streams.geojson"',
       });
-
-      headerWritten = true;
     }
 
     const tid = setInterval(() => {
+      writeHeader();
+
       res.write("\n");
     }, 10000);
 
@@ -152,11 +149,16 @@ async function handleRequest(req, res) {
     if (closed) {
       console.log("Connection closed prematurely");
     } else if (err.message === "area too big") {
-      res.writeHead(400, { "Content-Type": "text/plain" });
+      if (!res.headersSent) {
+        res.writeHead(400, { "Content-Type": "text/plain" });
+      }
       res.end("Area is too big.");
     } else {
       console.error(err);
-      res.writeHead(500);
+
+      if (!res.headersSent) {
+        res.writeHead(500);
+      }
       res.end(err.message);
     }
   } finally {
@@ -219,11 +221,11 @@ async function workHard() {
     $`whitebox_tools --run=RasterStreamsToVector --streams=long_streams_clean.tif --d8_pntr=pointer.tif --output=streams`
   );
 
-  await run($`ogr2ogr -a_srs epsg:8353 streams8.shp streams.shp`);
+  await run($`ogr2ogr --overwrite -a_srs epsg:8353 streams8.shp streams.shp`);
 
   await run($`grass --tmp-location EPSG:8353 --exec sh grass_batch_job.sh`);
 
   await run(
-    $`ogr2ogr -simplify 1.5 -t_srs EPSG:4326 simplified.geojson smooth.gpkg`
+    $`ogr2ogr --overwrite -simplify 1.5 -t_srs EPSG:4326 simplified.geojson smooth.gpkg`
   );
 }
