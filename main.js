@@ -50,13 +50,13 @@ async function handleRequest(req, res) {
     p = undefined;
   });
 
-  busy = true;
-
   const params = new URL(req.url, `http://${req.headers.host}`).searchParams;
 
   const threshold = params.get("threshold") || 20000;
 
   const minLen = params.get("min-len") || 50;
+
+  busy = true;
 
   try {
     const ws = fs.createWriteStream("mask.geojson");
@@ -143,6 +143,10 @@ async function handleRequest(req, res) {
     });
 
     await new Promise((resolve, reject) => {
+      res.on("error", (err) => {
+        reject(err);
+      });
+
       rs.on("error", (err) => {
         reject(err);
       });
