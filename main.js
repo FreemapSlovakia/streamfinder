@@ -56,6 +56,8 @@ async function handleRequest(req, res) {
 
   const minLen = params.get("min-len") || 50;
 
+  const toOsm = !!params.get("to-osm");
+
   busy = true;
 
   try {
@@ -117,7 +119,7 @@ async function handleRequest(req, res) {
       }
 
       res.writeHead(200, {
-        "Content-Type": "application/geo+json",
+        "Content-Type": toOsm ? "application/xml" : "application/geo+json",
         // "Content-Disposition": 'attachment; filename="streams.geojson"',
       });
     }
@@ -129,14 +131,14 @@ async function handleRequest(req, res) {
     }, 10000);
 
     try {
-      await workHard(threshold, minLen);
+      await workHard(threshold, minLen, toOsm);
     } finally {
       clearInterval(tid);
     }
 
     writeHeader();
 
-    const rs = fs.createReadStream("simplified.geojson");
+    const rs = fs.createReadStream(toOsm ? "simplified.osm" : "simplified.geojson");
 
     rs.on("open", () => {
       rs.pipe(res);
@@ -148,7 +150,7 @@ async function handleRequest(req, res) {
       });
 
       res.on("close", () => {
-        reject(new Error('unecpected close'));
+        reject(new Error("unecpected close"));
       });
 
       rs.on("error", (err) => {
@@ -197,7 +199,7 @@ async function run(pp) {
   return res;
 }
 
-async function workHard(threshold, minLen) {
+async function workHard(threshold, minLen, toOsm) {
   const a = await run(
     $`ogrinfo -q -dialect SQLite -sql "SELECT SUM(ST_Area(st_transform(geometry, 8353))) AS area FROM mask" mask.geojson`
   );
@@ -242,4 +244,8 @@ async function workHard(threshold, minLen) {
   await run(
     $`ogr2ogr -simplify 1.5 -t_srs EPSG:4326 simplified.geojson smooth.gpkg`
   );
+
+  if (toOsm) {
+    await run($`geojsontoosm simplified.geojson > simplified.osm`);
+  }
 }
