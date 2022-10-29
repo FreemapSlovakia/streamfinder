@@ -52,9 +52,11 @@ async function handleRequest(req, res) {
 
   const params = new URL(req.url, `http://${req.headers.host}`).searchParams;
 
-  const threshold = params.get("threshold") || 20000;
+  const threshold = params.get("threshold") || "20000";
 
-  const minLen = params.get("min-len") || 50;
+  const minLen = params.get("min-len") || "50";
+
+  const simplifyTolerance = params.get("simplify-tolerance") || "1.5";
 
   const toOsm = !!params.get("to-osm");
 
@@ -131,14 +133,16 @@ async function handleRequest(req, res) {
     }, 10000);
 
     try {
-      await workHard(threshold, minLen, toOsm);
+      await workHard(threshold, minLen, simplifyTolerance, toOsm);
     } finally {
       clearInterval(tid);
     }
 
     writeHeader();
 
-    const rs = fs.createReadStream(toOsm ? "simplified.osm" : "simplified.geojson");
+    const rs = fs.createReadStream(
+      toOsm ? "simplified.osm" : "simplified.geojson"
+    );
 
     rs.on("open", () => {
       rs.pipe(res);
@@ -199,7 +203,7 @@ async function run(pp) {
   return res;
 }
 
-async function workHard(threshold, minLen, toOsm) {
+async function workHard(threshold, minLen, simplifyTolerance, toOsm) {
   const a = await run(
     $`ogrinfo -q -dialect SQLite -sql "SELECT SUM(ST_Area(st_transform(geometry, 8353))) AS area FROM mask" mask.geojson`
   );
@@ -242,7 +246,7 @@ async function workHard(threshold, minLen, toOsm) {
   await run($`grass --tmp-location EPSG:8353 --exec sh grass_batch_job.sh`);
 
   await run(
-    $`ogr2ogr -simplify 1.5 -t_srs EPSG:4326 simplified.geojson smooth.gpkg`
+    $`ogr2ogr -simplify ${simplifyTolerance} -t_srs EPSG:4326 simplified.geojson smooth.gpkg`
   );
 
   if (toOsm) {
