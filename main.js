@@ -111,7 +111,7 @@ async function handleRequest(req, res) {
       }
 
       res.writeHead(200, {
-        "Content-Type": "application/json",
+        "Content-Type": "application/geo+json",
         // "Content-Disposition": 'attachment; filename="streams.geojson"',
       });
     }
