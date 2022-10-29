@@ -52,12 +52,11 @@ async function handleRequest(req, res) {
 
   busy = true;
 
-
   const params = new URL(req.url, `http://${req.headers.host}`).searchParams;
 
-  const threshold = params.get('threshold') || 20000;
+  const threshold = params.get("threshold") || 20000;
 
-  const minLen = params.get('min-len') || 50;
+  const minLen = params.get("min-len") || 50;
 
   try {
     const ws = fs.createWriteStream("mask.geojson");
@@ -80,13 +79,12 @@ async function handleRequest(req, res) {
           resolve();
         });
       });
-    } else {
+    } else if (req.method === "GET") {
       const mask = params.get("mask");
 
       if (!mask) {
         res.writeHead(400, { "Content-Type": "text/plain" });
         res.end("Missing mask parameter.");
-
         return;
       }
 
@@ -105,6 +103,10 @@ async function handleRequest(req, res) {
           }
         });
       });
+    } else {
+      res.writeHead(405);
+      res.end();
+      return;
     }
 
     console.log("[Responding]");
