@@ -147,6 +147,10 @@ async function handleRequest(req, res) {
         reject(err);
       });
 
+      res.on("close", () => {
+        reject(new Error('unecpected close'));
+      });
+
       rs.on("error", (err) => {
         reject(err);
       });
