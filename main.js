@@ -141,7 +141,7 @@ async function handleRequest(req, res) {
     writeHeader();
 
     const rs = fs.createReadStream(
-      toOsm ? "simplified.osm" : "simplified.geojson"
+      toOsm ? "result.osm" : "result.geojson"
     );
 
     rs.on("open", () => {
@@ -249,7 +249,11 @@ async function workHard(threshold, minLen, simplifyTolerance, toOsm) {
     $`ogr2ogr -simplify ${simplifyTolerance} -t_srs EPSG:4326 simplified.geojson smooth.gpkg`
   );
 
+  await run(
+    $`jq '.features[].properties = {waterway: "stream", source: "ÚGKK SR DMR 5.0"}' simplified.geojson > result.geojson`
+  );
+
   if (toOsm) {
-    await run($`geojsontoosm simplified.geojson > simplified.osm`);
+    await run($`geojsontoosm result.geojson > result.osm`);
   }
 }
