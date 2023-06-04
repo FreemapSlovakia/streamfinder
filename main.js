@@ -2,7 +2,6 @@ import http from "node:http";
 import fs from "node:fs";
 import process from "node:process";
 import { $, ProcessPromise } from "zx";
-import area from "@turf/area";
 
 /** @type {ProcessPromise} */
 let p;
@@ -140,9 +139,7 @@ async function handleRequest(req, res) {
 
     writeHeader();
 
-    const rs = fs.createReadStream(
-      toOsm ? "result.osm" : "result.geojson"
-    );
+    const rs = fs.createReadStream(toOsm ? "result.osm" : "result.geojson");
 
     rs.on("open", () => {
       rs.pipe(res);
@@ -214,23 +211,24 @@ async function workHard(threshold, minLen, simplifyTolerance, toOsm) {
     throw new Error("area too big");
   }
 
+  const demPath =
+    process.env.DEM_PATH ??
+    "/media/martin/OSM/___LIDAR_UGKK_DEM5_0_JTSK03_1cm.tif";
+
   await run(
-    $`gdalwarp -overwrite -of GTiff -cutline mask.geojson -crop_to_cutline ${
-      process.env.DEM_PATH ??
-      "/media/martin/OSM/___LIDAR_UGKK_DEM5_0_JTSK03_1cm.tif"
-    } cropped.tif`
+    $`gdalwarp -overwrite -of GTiff -dstnodata -9999 -cutline mask.geojson -crop_to_cutline ${demPath} cropped.tif`
   );
 
   await run(
-    $`whitebox_tools --run=FlowAccumulationFullWorkflow --dem=cropped.tif --out_dem=dem.tif --out_pntr=pointer.tif --out_accum=accum.tif`
+    $`whitebox_tools --wd=. --run=FlowAccumulationFullWorkflow --dem=cropped.tif --out_dem=dem.tif --out_pntr=pointer.tif --out_accum=accum.tif`
   );
 
   await run(
-    $`whitebox_tools --run=ExtractStreams --flow_accum=accum.tif --threshold=${threshold} --output=streams.tif`
+    $`whitebox_tools --wd=. --run=ExtractStreams --flow_accum=accum.tif --threshold=${threshold} --output=streams.tif`
   );
 
   await run(
-    $`whitebox_tools --run=RemoveShortStreams --d8_pntr=pointer.tif --streams=streams.tif --output=long_streams.tif --min_length=${minLen}`
+    $`whitebox_tools --wd=. --run=RemoveShortStreams --d8_pntr=pointer.tif --streams=streams.tif --output=long_streams.tif --min_length=${minLen}`
   );
 
   await run(
@@ -238,7 +236,7 @@ async function workHard(threshold, minLen, simplifyTolerance, toOsm) {
   );
 
   await run(
-    $`whitebox_tools --run=RasterStreamsToVector --streams=long_streams_clean.tif --d8_pntr=pointer.tif --output=streams`
+    $`whitebox_tools --wd=. --run=RasterStreamsToVector --streams=long_streams_clean.tif --d8_pntr=pointer.tif --output=streams`
   );
 
   await run($`ogr2ogr -a_srs epsg:8353 streams8.shp streams.shp`);
