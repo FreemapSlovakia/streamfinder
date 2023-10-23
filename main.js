@@ -59,6 +59,13 @@ async function handleRequest(req, res) {
 
   const simplifyTolerance = params.get("simplify-tolerance") || "1.5";
 
+  if (
+    [threshold, pixelSize ?? "1", minLen, simplifyTolerance].some(isNaN(parseFloat()))
+  ) {
+    res.statusCode = 400;
+    return;
+  }
+
   const toOsm = !!params.get("to-osm");
 
   busy = true;
