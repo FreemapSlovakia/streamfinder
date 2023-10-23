@@ -60,7 +60,9 @@ async function handleRequest(req, res) {
   const simplifyTolerance = params.get("simplify-tolerance") || "1.5";
 
   if (
-    [threshold, pixelSize ?? "1", minLen, simplifyTolerance].some(isNaN(parseFloat()))
+    [threshold, pixelSize ?? "1", minLen, simplifyTolerance].some((a) =>
+      isNaN(parseFloat(a))
+    )
   ) {
     res.statusCode = 400;
     return;
