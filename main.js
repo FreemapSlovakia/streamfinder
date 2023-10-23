@@ -1,9 +1,9 @@
 import http from "node:http";
 import fs from "node:fs";
 import process from "node:process";
-import { $, ProcessPromise } from "zx";
+import { $ } from "zx";
 
-/** @type {ProcessPromise} */
+/** @type {import("zx").ProcessPromise} */
 let p;
 
 let busy = false;
@@ -53,6 +53,8 @@ async function handleRequest(req, res) {
 
   const threshold = params.get("threshold") || "20000";
 
+  const pixelSize = params.get("pixel-size");
+
   const minLen = params.get("min-len") || "50";
 
   const simplifyTolerance = params.get("simplify-tolerance") || "1.5";
@@ -60,6 +62,17 @@ async function handleRequest(req, res) {
   const toOsm = !!params.get("to-osm");
 
   busy = true;
+
+  function writeHeader() {
+    if (res.headersSent) {
+      return;
+    }
+
+    res.writeHead(200, {
+      "Content-Type": toOsm ? "application/xml" : "application/geo+json",
+      // "Content-Disposition": 'attachment; filename="streams.geojson"',
+    });
+  }
 
   try {
     const ws = fs.createWriteStream("mask.geojson");
@@ -114,17 +127,6 @@ async function handleRequest(req, res) {
 
     console.log("[Responding]");
 
-    function writeHeader() {
-      if (res.headersSent) {
-        return;
-      }
-
-      res.writeHead(200, {
-        "Content-Type": toOsm ? "application/xml" : "application/geo+json",
-        // "Content-Disposition": 'attachment; filename="streams.geojson"',
-      });
-    }
-
     const tid = setInterval(() => {
       writeHeader();
 
@@ -132,7 +134,7 @@ async function handleRequest(req, res) {
     }, 10000);
 
     try {
-      await workHard(threshold, minLen, simplifyTolerance, toOsm);
+      await workHard(threshold, minLen, simplifyTolerance, pixelSize, toOsm);
     } finally {
       clearInterval(tid);
     }
@@ -200,7 +202,13 @@ async function run(pp) {
   return res;
 }
 
-async function workHard(threshold, minLen, simplifyTolerance, toOsm) {
+async function workHard(
+  threshold,
+  minLen,
+  simplifyTolerance,
+  pixelSize,
+  toOsm
+) {
   const a = await run(
     $`ogrinfo -q -dialect SQLite -sql "SELECT SUM(ST_Area(st_transform(geometry, 8353))) AS area FROM mask" mask.geojson`
   );
@@ -216,7 +224,9 @@ async function workHard(threshold, minLen, simplifyTolerance, toOsm) {
     "/media/martin/OSM/___LIDAR_UGKK_DEM5_0_JTSK03_1cm.tif";
 
   await run(
-    $`gdalwarp -overwrite -of GTiff -dstnodata -9999 -cutline mask.geojson -crop_to_cutline ${demPath} cropped.tif`
+    $`gdalwarp -overwrite -of GTiff -dstnodata -9999 -cutline mask.geojson -crop_to_cutline ${
+      pixelSize ? `-tr ${pixelSize} ${pixelSize}` : ""
+    } ${demPath} cropped.tif`
   );
 
   await run(
