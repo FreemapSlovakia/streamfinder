@@ -83,10 +83,10 @@ async function handleRequest(req, res) {
     });
   }
 
+  const isHead = req.method === "HEAD";
+
   try {
     const ws = fs.createWriteStream("mask.geojson");
-
-    const isHead = req.method === "HEAD";
 
     if (req.method === "POST") {
       await new Promise((resolve, reject) => {
@@ -194,6 +194,7 @@ async function handleRequest(req, res) {
       if (!res.headersSent) {
         res.writeHead(400, { "Content-Type": "text/plain" });
       }
+
       res.end(isHead ? "" : "Area is too big.");
     } else {
       console.error(err);
