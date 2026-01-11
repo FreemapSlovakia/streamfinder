@@ -86,6 +86,8 @@ async function handleRequest(req, res) {
   try {
     const ws = fs.createWriteStream("mask.geojson");
 
+    const isHead = req.method === "HEAD";
+
     if (req.method === "POST") {
       await new Promise((resolve, reject) => {
         ws.on("open", () => {
@@ -104,12 +106,12 @@ async function handleRequest(req, res) {
           resolve();
         });
       });
-    } else if (req.method === "GET") {
+    } else if (req.method === "GET" || isHead) {
       const mask = params.get("mask");
 
       if (!mask) {
         res.writeHead(400, { "Content-Type": "text/plain" });
-        res.end("Missing mask parameter.");
+        res.end(isHead ? "" : "Missing mask parameter.");
         return;
       }
 
@@ -139,7 +141,9 @@ async function handleRequest(req, res) {
     const tid = setInterval(() => {
       writeHeader();
 
-      res.write("\n");
+      if (!isHead) {
+        res.write("\n");
+      }
     }, 10000);
 
     try {
@@ -152,9 +156,11 @@ async function handleRequest(req, res) {
 
     const rs = fs.createReadStream(toOsm ? "result.osm" : "result.geojson");
 
-    rs.on("open", () => {
-      rs.pipe(res);
-    });
+    if (!isHead) {
+      rs.on("open", () => {
+        rs.pipe(res);
+      });
+    }
 
     await new Promise((resolve, reject) => {
       res.on("error", (err) => {
@@ -180,14 +186,15 @@ async function handleRequest(req, res) {
       if (!res.headersSent) {
         res.writeHead(400, { "Content-Type": "text/plain" });
       }
-      res.end("Area is too big.");
+      res.end(isHead ? "" : "Area is too big.");
     } else {
       console.error(err);
 
       if (!res.headersSent) {
         res.writeHead(500);
       }
-      res.end(err.message);
+
+      res.end(isHead ? "" : err.message);
     }
   } finally {
     busy = false;
