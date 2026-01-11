@@ -68,7 +68,7 @@ async function handleRequest(req, res) {
     return;
   }
 
-  const toOsm = !!params.get("to-osm");
+  const toOsm = /^(1|true|yes)$/.test(params.get("to-osm"));
 
   busy = true;
 
@@ -234,7 +234,7 @@ async function workHard(
 
   await run(
     $`gdalwarp -overwrite -of GTiff -dstnodata -9999 -cutline mask.geojson -crop_to_cutline ${
-      pixelSize ? `-tr ${pixelSize} ${pixelSize}` : ""
+      pixelSize ? ["-tr", pixelSize, pixelSize] : []
     } ${demPath} cropped.tif`
   );
 
@@ -255,7 +255,7 @@ async function workHard(
   );
 
   await run(
-    $`whitebox_tools --wd=. --run=RasterStreamsToVector --streams=long_streams_clean.tif --d8_pntr=pointer.tif --output=streams`
+    $`whitebox_tools --wd=. --run=RasterStreamsToVector --streams=long_streams_clean.tif --d8_pntr=pointer.tif --output=streams.shp`
   );
 
   await run($`ogr2ogr -a_srs epsg:8353 streams8.shp streams.shp`);
