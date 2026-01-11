@@ -138,31 +138,37 @@ async function handleRequest(req, res) {
 
     console.log("[Responding]");
 
-    const tid = setInterval(() => {
-      writeHeader();
+    let tid;
 
-      if (!isHead) {
+    if (!isHead) {
+      tid = setInterval(() => {
+        writeHeader();
+
         res.write("\n");
-      }
-    }, 10000);
+      }, 10000);
+    }
 
     try {
       await workHard(threshold, minLen, simplifyTolerance, pixelSize, toOsm);
     } finally {
-      clearInterval(tid);
+      if (typeof tid === "number") {
+        clearInterval(tid);
+      }
     }
-
-    writeHeader();
 
     const filename = toOsm ? "result.osm" : "result.geojson";
 
     if (isHead) {
       const stat = await fs.promises.stat(filename);
 
-      res.setHeader("content-length", stat.size);
+      res.setHeader("Content-Length", stat.size);
+
+      writeHeader();
 
       res.end();
     } else {
+      writeHeader();
+
       const rs = fs.createReadStream(filename);
 
       rs.on("open", () => {
