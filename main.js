@@ -154,31 +154,39 @@ async function handleRequest(req, res) {
 
     writeHeader();
 
-    const rs = fs.createReadStream(toOsm ? "result.osm" : "result.geojson");
+    const filename = toOsm ? "result.osm" : "result.geojson";
 
-    if (!isHead) {
+    if (isHead) {
+      const stat = await fs.promises.stat(filename);
+
+      res.setHeader("content-length", stat.size);
+
+      res.end();
+    } else {
+      const rs = fs.createReadStream(filename);
+
       rs.on("open", () => {
         rs.pipe(res);
       });
+
+      await new Promise((resolve, reject) => {
+        res.on("error", (err) => {
+          reject(err);
+        });
+
+        res.on("close", () => {
+          reject(new Error("unecpected close"));
+        });
+
+        rs.on("error", (err) => {
+          reject(err);
+        });
+
+        rs.on("end", () => {
+          resolve();
+        });
+      });
     }
-
-    await new Promise((resolve, reject) => {
-      res.on("error", (err) => {
-        reject(err);
-      });
-
-      res.on("close", () => {
-        reject(new Error("unecpected close"));
-      });
-
-      rs.on("error", (err) => {
-        reject(err);
-      });
-
-      rs.on("end", () => {
-        resolve();
-      });
-    });
   } catch (err) {
     if (closed) {
       console.log("Connection closed prematurely");
