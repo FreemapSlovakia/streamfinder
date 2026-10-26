@@ -121,7 +121,9 @@ async function handleRequest(req, res) {
 
     res.writeHead(200, {
       "Content-Type": toOsm ? "application/xml" : "application/geo+json",
-      // "Content-Disposition": 'attachment; filename="streams.geojson"',
+      "Content-Disposition": `attachment; filename="streams.${
+        toOsm ? "osm" : "geojson"
+      }"`,
     });
 
     if (!isHead) {
