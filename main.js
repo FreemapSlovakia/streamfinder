@@ -38,6 +38,8 @@ if (!sources.length) {
 
 let busy = false;
 
+const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8"?>\n';
+
 const server = http.createServer(handleRequest);
 
 /**
@@ -106,6 +108,12 @@ async function handleRequest(req, res) {
 
   job = thisJob;
 
+  const isHead = req.method === "HEAD";
+
+  // Whitespace may lead a JSON document, and an XML one after its
+  // declaration, so the keep-alive sends the declaration with the header.
+  const preamble = toOsm ? XML_DECLARATION : "";
+
   function writeHeader() {
     if (res.headersSent) {
       return;
@@ -115,9 +123,11 @@ async function handleRequest(req, res) {
       "Content-Type": toOsm ? "application/xml" : "application/geo+json",
       // "Content-Disposition": 'attachment; filename="streams.geojson"',
     });
-  }
 
-  const isHead = req.method === "HEAD";
+    if (!isHead) {
+      res.write(preamble);
+    }
+  }
 
   try {
     const ws = fs.createWriteStream("mask.geojson");
@@ -175,19 +185,20 @@ async function handleRequest(req, res) {
     let tid;
 
     if (!isHead) {
+      // JOSM reads with a 30 s timeout
       tid = setInterval(() => {
-        writeHeader();
-
-        res.write("\n");
+        if (res.headersSent) {
+          res.write("\n");
+        } else {
+          writeHeader();
+        }
       }, 10000);
     }
 
     try {
       await workHard(threshold, minLen, simplifyTolerance, pixelSize, toOsm);
     } finally {
-      if (typeof tid === "number") {
-        clearInterval(tid);
-      }
+      clearInterval(tid);
     }
 
     const filename = toOsm ? "result.osm" : "result.geojson";
@@ -195,7 +206,10 @@ async function handleRequest(req, res) {
     if (isHead) {
       const stat = await fs.promises.stat(filename);
 
-      res.setHeader("Content-Length", stat.size);
+      res.setHeader(
+        "Content-Length",
+        stat.size + Buffer.byteLength(preamble)
+      );
 
       writeHeader();
 
@@ -427,17 +441,27 @@ async function workHard(
     $`gdal_calc.py --overwrite --calc '(A==1)*1' -A long_streams.tif --outfile long_streams_clean.tif`
   );
 
-  await run(
-    $`whitebox_tools --wd=. --run=RasterStreamsToVector --streams=long_streams_clean.tif --d8_pntr=pointer.tif --output=streams.shp`
-  );
+  const streamStats = await bandStats("long_streams_clean.tif");
 
-  await run($`ogr2ogr -a_srs ${primary.wkt} streams8.shp streams.shp`);
+  // RasterStreamsToVector panics on a raster without a single stream cell
+  if (Number(streamStats?.STATISTICS_MAXIMUM) > 0) {
+    await run(
+      $`whitebox_tools --wd=. --run=RasterStreamsToVector --streams=long_streams_clean.tif --d8_pntr=pointer.tif --output=streams.shp`
+    );
 
-  await run($`grass --tmp-location cropped.tif --exec sh grass_batch_job.sh`);
+    await run($`ogr2ogr -a_srs ${primary.wkt} streams8.shp streams.shp`);
 
-  await run(
-    $`ogr2ogr -simplify ${simplifyTolerance} -t_srs EPSG:4326 simplified.geojson smooth.gpkg`
-  );
+    await run($`grass --tmp-location cropped.tif --exec sh grass_batch_job.sh`);
+
+    await run(
+      $`ogr2ogr -simplify ${simplifyTolerance} -t_srs EPSG:4326 simplified.geojson smooth.gpkg`
+    );
+  } else {
+    await fs.promises.writeFile(
+      "simplified.geojson",
+      JSON.stringify({ type: "FeatureCollection", features: [] })
+    );
+  }
 
   const attribution = used.flatMap((src) => src.attributions);
 
@@ -512,23 +536,22 @@ async function rasterInfo(file) {
   );
 }
 
-async function hasData(file) {
+/**
+ * The first band's statistics. Without a valid pixel, STATISTICS_VALID_PERCENT
+ * is 0 and there are no others.
+ */
+async function bandStats(file) {
   // without PAM, statistics left in an .aux.xml by an earlier file of the
   // same name are neither read nor written
   const r = await run(
-    $`gdalinfo -json -stats --config GDAL_PAM_ENABLED NO ${file}`
-      .quiet()
-      .nothrow()
+    $`gdalinfo -json -stats --config GDAL_PAM_ENABLED NO ${file}`.quiet()
   );
 
-  if (r.exitCode !== 0) {
-    return false;
-  }
+  return JSON.parse(r.stdout).bands[0].metadata?.[""];
+}
 
-  const percent =
-    JSON.parse(r.stdout).bands[0].metadata?.[""]?.STATISTICS_VALID_PERCENT;
-
-  return Number(percent) > 0;
+async function hasData(file) {
+  return Number((await bandStats(file))?.STATISTICS_VALID_PERCENT) > 0;
 }
 
 function geojsonBbox(geojson) {
